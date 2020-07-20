@@ -71,6 +71,7 @@ class CNNNet(nn.Module):
         y = self.classifier(f)
         return y
 
+
 class CNNExtractNet(nn.Module):
     def __init__(self, model_name, pretrained=True):
         super(CNNExtractNet, self).__init__()
@@ -120,7 +121,6 @@ class CNNExtractNet(nn.Module):
             original_model = models.resnet50(pretrained)
             self.features = nn.Sequential(*list(original_model.children())[:-1])
             self.model_name = 'resnet50'
-
 
     def forward(self, x):
         f = self.features(x)

@@ -1,6 +1,7 @@
 import torch
 import torch.utils.data.sampler as sampler
 
+
 class SubsetSampler(sampler.Sampler):
     def __init__(self, indices):
         self.indices = indices
@@ -10,5 +11,3 @@ class SubsetSampler(sampler.Sampler):
 
     def __len__(self):
         return len(self.indices)
-
-

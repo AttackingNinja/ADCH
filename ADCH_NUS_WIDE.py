@@ -14,7 +14,7 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 
 import utils.data_processing as dp
-import utils.adsh_loss as al
+import utils.adch_loss as al
 import utils.cnn_model as cnn_model
 import utils.subset_sampler as subsetsampler
 import utils.calc_hr as calc_hr
@@ -22,7 +22,7 @@ import utils.calc_hr as calc_hr
 parser = argparse.ArgumentParser(description="ADSH demo")
 parser.add_argument('--bits', default='12,24,32,48', type=str,
                     help='binary code length (default: 12,24,32,48)')
-parser.add_argument('--gpu', default='3', type=str,
+parser.add_argument('--gpu', default='5', type=str,
                     help='selected gpu (default: 1)')
 parser.add_argument('--arch', default='resnet50', type=str,
                     help='model name (default: resnet50)')
@@ -60,6 +60,7 @@ def _logging():
     logger.addHandler(ch)
     return
 
+
 def _record():
     global record
     record = {}
@@ -68,17 +69,11 @@ def _record():
     record['param'] = {}
     return
 
+
 def _save_record(record, filename):
     with open(filename, 'wb') as fp:
         pickle.dump(record, fp)
     return
-
-
-def encoding_onehot(target, nclasses=10):
-    target_onehot = torch.FloatTensor(target.size(0), nclasses)
-    target_onehot.zero_()
-    target_onehot.scatter_(1, target.view(-1, 1), 1)
-    return target_onehot
 
 
 def _dataset():
@@ -90,45 +85,46 @@ def _dataset():
         normalize
     ])
 
-    dset_database = dp.DatasetProcessingCIFAR_10(
-        'data/CIFAR-10', 'database_img.txt', 'database_label.txt', transformations)
-    dset_test = dp.DatasetProcessingCIFAR_10(
-        'data/CIFAR-10', 'test_img.txt', 'test_label.txt', transformations)
+    dset_database = dp.DatasetProcessingNUS_WIDE(
+        'data/NUS-WIDE', 'database_img.txt', 'database_label.txt', transformations
+    )
+    dset_test = dp.DatasetProcessingNUS_WIDE(
+        'data/NUS-WIDE', 'test_img.txt', 'test_label.txt', transformations
+    )
     num_database, num_test = len(dset_database), len(dset_test)
 
     def load_label(filename, DATA_DIR):
-        path = os.path.join(DATA_DIR, filename)
-        fp = open(path, 'r')
-        labels = [x.strip() for x in fp]
-        fp.close()
-        return torch.LongTensor(list(map(int, labels)))
-    testlabels = load_label('test_label.txt', 'data/CIFAR-10')
-    databaselabels = load_label('database_label.txt', 'data/CIFAR-10')
+        label_filepath = os.path.join(DATA_DIR, filename)
+        label = np.loadtxt(label_filepath, dtype=np.int64)
+        return torch.from_numpy(label)
 
-    testlabels = encoding_onehot(testlabels)
-    databaselabels = encoding_onehot(databaselabels)
+    databaselabels = load_label('database_label.txt', 'data/NUS-WIDE')
+    testlabels = load_label('test_label.txt', 'data/NUS-WIDE')
 
     dsets = (dset_database, dset_test)
     nums = (num_database, num_test)
     labels = (databaselabels, testlabels)
     return nums, dsets, labels
 
+
 def calc_sim(database_label, train_label):
     S = (database_label.mm(train_label.t()) > 0).type(torch.FloatTensor)
     '''
     soft constraint
     '''
-    r = S.sum() / (1-S).sum()
-    S = S*(1+r) - r
+    r = S.sum() / (1 - S).sum()
+    S = S * (1 + r) - r
     return S
+
 
 def calc_loss(V, U, S, code_length, select_index, gamma):
     num_database = V.shape[0]
-    square_loss = (U.dot(V.transpose()) - code_length*S) ** 2
+    square_loss = (U.dot(V.transpose()) - code_length * S) ** 2
     V_omega = V[select_index, :]
-    quantization_loss = (U-V_omega) ** 2
+    quantization_loss = (U - V_omega) ** 2
     loss = (square_loss.sum() + gamma * quantization_loss.sum()) / (opt.num_samples * num_database)
     return loss
+
 
 def encode(model, data_loader, num_data, bit):
     B = np.zeros([num_data, bit], dtype=np.float32)
@@ -139,11 +135,13 @@ def encode(model, data_loader, num_data, bit):
         B[data_ind.numpy(), :] = torch.sign(output.cpu().data).numpy()
     return B
 
+
 def adjusting_learning_rate(optimizer, iter):
     update_list = [10, 20, 30, 40, 50]
     if iter in update_list:
         for param_group in optimizer.param_groups:
             param_group['lr'] = param_group['lr'] / 10
+
 
 def adsh_algo(code_length):
     os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpu
@@ -161,6 +159,7 @@ def adsh_algo(code_length):
     num_samples = opt.num_samples
     gamma = opt.gamma
 
+    record['param']['topk'] = 5000
     record['param']['opt'] = opt
     record['param']['description'] = '[Comment: learning rate decay]'
     logger.info(opt)
@@ -180,7 +179,7 @@ def adsh_algo(code_length):
     '''
     model = cnn_model.CNNNet(opt.arch, code_length)
     model.cuda()
-    adsh_loss = al.ADSHLoss(gamma, code_length, num_database)
+    adsh_loss = al.ADCHLoss(gamma, code_length, num_database)
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     V = np.zeros((num_database, code_length))
@@ -206,7 +205,8 @@ def adsh_algo(code_length):
         for epoch in range(epochs):
             for iteration, (train_input, train_label, batch_ind) in enumerate(trainloader):
                 batch_size_ = train_label.size(0)
-                u_ind = np.linspace(iteration * batch_size, np.min((num_samples, (iteration+1)*batch_size)) - 1, batch_size_, dtype=int)
+                u_ind = np.linspace(iteration * batch_size, np.min((num_samples, (iteration + 1) * batch_size)) - 1,
+                                    batch_size_, dtype=int)
                 train_input = Variable(train_input.cuda())
 
                 output = model(train_input)
@@ -224,7 +224,7 @@ def adsh_algo(code_length):
         '''
         barU = np.zeros((num_database, code_length))
         barU[select_index, :] = U
-        Q = -2*code_length*Sim.cpu().numpy().transpose().dot(U) - 2 * gamma * barU
+        Q = -2 * code_length * Sim.cpu().numpy().transpose().dot(U) - 2 * gamma * barU
         for k in range(code_length):
             sel_ind = np.setdiff1d([ii for ii in range(code_length)], k)
             V_ = V[:, sel_ind]
@@ -242,24 +242,26 @@ def adsh_algo(code_length):
     '''
     model.eval()
     testloader = DataLoader(dset_test, batch_size=1,
-                             shuffle=False,
-                             num_workers=4)
+                            shuffle=False,
+                            num_workers=4)
     qB = encode(model, testloader, num_test, code_length)
     rB = V
     map = calc_hr.calc_map(qB, rB, test_labels.numpy(), database_labels.numpy())
-    logger.info('[Evaluation: mAP: %.4f]', map)
+    topkmap = calc_hr.calc_topMap(qB, rB, test_labels.numpy(), database_labels.numpy(), record['param']['topk'])
+    logger.info('[Evaluation: mAP: %.4f, top-%d mAP: %.4f]', map, record['param']['topk'], topkmap)
     record['rB'] = rB
     record['qB'] = qB
     record['map'] = map
+    record['topkmap'] = topkmap
     filename = os.path.join(logdir, str(code_length) + 'bits-record.pkl')
 
     _save_record(record, filename)
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     global opt, logdir
     opt = parser.parse_args()
-    logdir = '-'.join(['log/log-ADSH-cifar10', datetime.now().strftime("%y-%m-%d-%H-%M-%S")])
+    logdir = '-'.join(['log/log-ADSH-nuswide', datetime.now().strftime("%y-%m-%d-%H-%M-%S")])
     _logging()
     _record()
     bits = [int(bit) for bit in opt.bits.split(',')]

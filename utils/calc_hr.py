@@ -1,9 +1,11 @@
 import numpy as np
 
+
 def calc_hammingDist(B1, B2):
     q = B2.shape[1]
     distH = 0.5 * (q - np.dot(B1, B2.transpose()))
     return distH
+
 
 def calc_map(qB, rB, queryL, retrievalL):
     # qB: {-1,+1}^{mxq}
@@ -33,6 +35,7 @@ def calc_map(qB, rB, queryL, retrievalL):
 
     return map
 
+
 def calc_topMap(qB, rB, queryL, retrievalL, topk):
     # qB: {-1,+1}^{mxq}
     # rB: {-1,+1}^{nxq}
@@ -61,5 +64,6 @@ def calc_topMap(qB, rB, queryL, retrievalL, topk):
     # print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
     return topkmap
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     pass

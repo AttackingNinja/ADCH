@@ -76,4 +76,3 @@ class DatasetProcessingMS_COCO(Dataset):
 
     def __len__(self):
         return len(self.img_filename)
-
