@@ -100,6 +100,22 @@ def calc_sim(database_label, train_label):
     return S
 
 
+def update_sim(output, u_ind, V, Sim, pGamma, pEpsilon):
+    u = np.sign(output)
+    d = 0.5 * (u.shape[1] - np.dot(u, V.transpose()))
+
+    def alpha(m, n):
+        if Sim[m, n] > 0:
+            return (2 * pGamma + d[m, n] ** pEpsilon) / pGamma
+        else:
+            return Sim[m, n]
+
+    for i in u_ind:
+        for j in Sim.size(1):
+            Sim[i, j] = alpha(i, j)
+    return Sim
+
+
 def calc_loss(V, U, S, code_length, select_index, pLambda):
     num_database = V.shape[0]
     square_loss = (U.dot(V.transpose()) - code_length * S) ** 2
@@ -191,19 +207,21 @@ def adch_algo(code_length):
                 loss = adch_loss(output, V, S, V[batch_ind.cpu().numpy(), :])
                 loss.backward()
                 optimizer.step()
+                Sim = update_sim(U[u_ind, :], u_ind, V, Sim, pGamma, pEpsilon)
         adjusting_learning_rate(optimizer, iter)
         '''
         learning binary codes: discrete coding
         '''
         barU = np.zeros((num_database, code_length))
         barU[select_index, :] = U
-        Q = -2 * code_length * Sim.cpu().numpy().transpose().dot(U) - 2 * pLambda * barU
         for k in range(code_length):
+            Q = -2 * code_length * Sim.cpu().numpy().transpose().dot(U) - 2 * pLambda * barU
             sel_ind = np.setdiff1d([ii for ii in range(code_length)], k)
             V_ = V[:, sel_ind]
             Uk = U[:, k]
             U_ = U[:, sel_ind]
             V[:, k] = -np.sign(Q[:, k] + 2 * V_.dot(U_.transpose().dot(Uk)))
+            Sim = update_sim(U, np.arange(U.shape[0] + 1), V, Sim, pGamma, pEpsilon)
         iter_time = time.time() - iter_time
         loss_ = calc_loss(V, U, Sim.cpu().numpy(), code_length, select_index, pLambda)
         logger.info('[Iteration: %3d/%3d][Train Loss: %.4f]', iter, max_iter, loss_)
