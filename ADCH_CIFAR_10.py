@@ -4,39 +4,27 @@ import argparse
 import logging
 import torch
 import time
-
 import numpy as np
 import torch.optim as optim
 import torchvision.transforms as transforms
-
 from datetime import datetime
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
-
 import utils.data_processing as dp
 import utils.adch_loss as al
 import utils.cnn_model as cnn_model
 import utils.subset_sampler as subsetsampler
 import utils.calc_hr as calc_hr
 
-parser = argparse.ArgumentParser(description="ADSH demo")
-parser.add_argument('--bits', default='12,24,32,48', type=str,
-                    help='binary code length (default: 12,24,32,48)')
-parser.add_argument('--gpu', default='3', type=str,
-                    help='selected gpu (default: 1)')
-parser.add_argument('--arch', default='resnet50', type=str,
-                    help='model name (default: resnet50)')
-parser.add_argument('--max-iter', default=50, type=int,
-                    help='maximum iteration (default: 50)')
-parser.add_argument('--epochs', default=3, type=int,
-                    help='number of epochs (default: 3)')
-parser.add_argument('--batch-size', default=64, type=int,
-                    help='batch size (default: 64)')
-
-parser.add_argument('--num-samples', default=2000, type=int,
-                    help='hyper-parameter: number of samples (default: 2000)')
-parser.add_argument('--gamma', default=200, type=int,
-                    help='hyper-parameter: gamma (default: 200)')
+parser = argparse.ArgumentParser(description="ADCH demo")
+parser.add_argument('--bits', default='12,24,32,48', type=str, help='binary code length (default: 12,24,32,48)')
+parser.add_argument('--gpu', default='3', type=str, help='selected gpu (default: 1)')
+parser.add_argument('--arch', default='resnet50', type=str, help='model name (default: resnet50)')
+parser.add_argument('--max-iter', default=50, type=int, help='maximum iteration (default: 50)')
+parser.add_argument('--epochs', default=3, type=int, help='number of epochs (default: 3)')
+parser.add_argument('--batch-size', default=64, type=int, help='batch size (default: 64)')
+parser.add_argument('--num-samples', default=2000, type=int, help='hyper-parameter: number of samples (default: 2000)')
+parser.add_argument('--gamma', default=200, type=int, help='hyper-parameter: gamma (default: 200)')
 parser.add_argument('--learning-rate', default=0.001, type=float,
                     help='hyper-parameter: learning rate (default: 10**-3)')
 
@@ -51,11 +39,9 @@ def _logging():
     fh.setLevel(logging.INFO)
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
-
     _format = logging.Formatter("%(name)-4s: %(levelname)-4s: %(message)s")
     fh.setFormatter(_format)
     ch.setFormatter(_format)
-
     logger.addHandler(fh)
     logger.addHandler(ch)
     return
@@ -91,11 +77,9 @@ def _dataset():
         transforms.ToTensor(),
         normalize
     ])
-
-    dset_database = dp.DatasetProcessingCIFAR_10(
-        'data/CIFAR-10', 'database_img.txt', 'database_label.txt', transformations)
-    dset_test = dp.DatasetProcessingCIFAR_10(
-        'data/CIFAR-10', 'test_img.txt', 'test_label.txt', transformations)
+    dset_database = dp.DatasetProcessingCIFAR_10('data/CIFAR-10', 'database_img.txt', 'database_label.txt',
+                                                 transformations)
+    dset_test = dp.DatasetProcessingCIFAR_10('data/CIFAR-10', 'test_img.txt', 'test_label.txt', transformations)
     num_database, num_test = len(dset_database), len(dset_test)
 
     def load_label(filename, DATA_DIR):
@@ -107,10 +91,8 @@ def _dataset():
 
     testlabels = load_label('test_label.txt', 'data/CIFAR-10')
     databaselabels = load_label('database_label.txt', 'data/CIFAR-10')
-
     testlabels = encoding_onehot(testlabels)
     databaselabels = encoding_onehot(databaselabels)
-
     dsets = (dset_database, dset_test)
     nums = (num_database, num_test)
     labels = (databaselabels, testlabels)
@@ -153,11 +135,10 @@ def adjusting_learning_rate(optimizer, iter):
             param_group['lr'] = param_group['lr'] / 10
 
 
-def adsh_algo(code_length):
+def adch_algo(code_length):
     os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpu
     torch.manual_seed(0)
     torch.cuda.manual_seed(0)
-
     '''
     parameter setting
     '''
@@ -168,13 +149,11 @@ def adsh_algo(code_length):
     weight_decay = 5 * 10 ** -4
     num_samples = opt.num_samples
     gamma = opt.gamma
-
     record['param']['opt'] = opt
     record['param']['description'] = '[Comment: learning rate decay]'
     logger.info(opt)
     logger.info(code_length)
     logger.info(record['param']['description'])
-
     '''
     dataset preprocessing
     '''
@@ -182,17 +161,14 @@ def adsh_algo(code_length):
     num_database, num_test = nums
     dset_database, dset_test = dsets
     database_labels, test_labels = labels
-
     '''
     model construction
     '''
     model = cnn_model.CNNNet(opt.arch, code_length)
     model.cuda()
-    adsh_loss = al.ADCHLoss(gamma, code_length, num_database)
+    adch_loss = al.ADCHLoss(gamma, code_length, num_database)
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-
     V = np.zeros((num_database, code_length))
-
     model.train()
     for iter in range(max_iter):
         iter_time = time.time()
@@ -201,10 +177,7 @@ def adsh_algo(code_length):
         '''
         select_index = list(np.random.permutation(range(num_database)))[0: num_samples]
         _sampler = subsetsampler.SubsetSampler(select_index)
-        trainloader = DataLoader(dset_database, batch_size=batch_size,
-                                 sampler=_sampler,
-                                 shuffle=False,
-                                 num_workers=4)
+        trainloader = DataLoader(dset_database, batch_size=batch_size, sampler=_sampler, shuffle=False, num_workers=4)
         '''
         learning deep neural network: feature learning
         '''
@@ -217,17 +190,14 @@ def adsh_algo(code_length):
                 u_ind = np.linspace(iteration * batch_size, np.min((num_samples, (iteration + 1) * batch_size)) - 1,
                                     batch_size_, dtype=int)
                 train_input = Variable(train_input.cuda())
-
                 output = model(train_input)
                 S = Sim.index_select(0, torch.from_numpy(u_ind))
                 U[u_ind, :] = output.cpu().data.numpy()
-
                 model.zero_grad()
-                loss = adsh_loss(output, V, S, V[batch_ind.cpu().numpy(), :])
+                loss = adch_loss(output, V, S, V[batch_ind.cpu().numpy(), :])
                 loss.backward()
                 optimizer.step()
         adjusting_learning_rate(optimizer, iter)
-
         '''
         learning binary codes: discrete coding
         '''
@@ -245,14 +215,11 @@ def adsh_algo(code_length):
         logger.info('[Iteration: %3d/%3d][Train Loss: %.4f]', iter, max_iter, loss_)
         record['train loss'].append(loss_)
         record['iter time'].append(iter_time)
-
     '''
     training procedure finishes, evaluation
     '''
     model.eval()
-    testloader = DataLoader(dset_test, batch_size=1,
-                            shuffle=False,
-                            num_workers=4)
+    testloader = DataLoader(dset_test, batch_size=1, shuffle=False, num_workers=4)
     qB = encode(model, testloader, num_test, code_length)
     rB = V
     map = calc_hr.calc_map(qB, rB, test_labels.numpy(), database_labels.numpy())
@@ -261,7 +228,6 @@ def adsh_algo(code_length):
     record['qB'] = qB
     record['map'] = map
     filename = os.path.join(logdir, str(code_length) + 'bits-record.pkl')
-
     _save_record(record, filename)
 
 
@@ -273,4 +239,4 @@ if __name__ == "__main__":
     _record()
     bits = [int(bit) for bit in opt.bits.split(',')]
     for bit in bits:
-        adsh_algo(bit)
+        adch_algo(bit)
