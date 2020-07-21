@@ -18,13 +18,13 @@ import utils.calc_hr as calc_hr
 
 parser = argparse.ArgumentParser(description="ADCH demo")
 parser.add_argument('--bits', default='12,24,32,48', type=str, help='binary code length (default: 12,24,32,48)')
-parser.add_argument('--gpu', default='3', type=str, help='selected gpu (default: 1)')
+parser.add_argument('--gpu', default='0', type=str, help='selected gpu (default: 0)')
 parser.add_argument('--arch', default='resnet50', type=str, help='model name (default: resnet50)')
 parser.add_argument('--max-iter', default=50, type=int, help='maximum iteration (default: 50)')
 parser.add_argument('--epochs', default=3, type=int, help='number of epochs (default: 3)')
 parser.add_argument('--batch-size', default=64, type=int, help='batch size (default: 64)')
 parser.add_argument('--num-samples', default=2000, type=int, help='hyper-parameter: number of samples (default: 2000)')
-parser.add_argument('--ppLambda', default=1, type=int, help='hyper-parameter: pLambda (default: 1)')
+parser.add_argument('--pGamma', default=1, type=int, help='hyper-parameter: gamma (default: 1)')
 parser.add_argument('--pEpsilon', default=2, type=int, help='hyper-parameter: epsilon (default: 2)')
 parser.add_argument('--pLambda', default=200, type=int, help='hyper-parameter: lambda (default: 200)')
 parser.add_argument('--learning-rate', default=0.001, type=float,
@@ -256,7 +256,7 @@ def adch_algo(code_length):
 if __name__ == "__main__":
     global opt, logdir
     opt = parser.parse_args()
-    logdir = '-'.join(['log/log-ADSH-cifar10', datetime.now().strftime("%y-%m-%d-%H-%M-%S")])
+    logdir = '-'.join(['log/log-ADCH-cifar10', datetime.now().strftime("%y-%m-%d-%H-%M-%S")])
     _logging()
     _record()
     bits = [int(bit) for bit in opt.bits.split(',')]

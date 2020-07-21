@@ -18,7 +18,7 @@ import utils.calc_hr as calc_hr
 
 parser = argparse.ArgumentParser(description="ADCH demo")
 parser.add_argument('--bits', default='12,24,32,48', type=str, help='binary code length (default: 12,24,32,48)')
-parser.add_argument('--gpu', default='5', type=str, help='selected gpu (default: 1)')
+parser.add_argument('--gpu', default='0', type=str, help='selected gpu (default: 0)')
 parser.add_argument('--arch', default='resnet50', type=str, help='model name (default: resnet50)')
 parser.add_argument('--max-iter', default=50, type=int, help='maximum iteration (default: 50)')
 parser.add_argument('--epochs', default=3, type=int, help='number of epochs (default: 3)')
@@ -248,7 +248,7 @@ def adch_algo(code_length):
 if __name__ == "__main__":
     global opt, logdir
     opt = parser.parse_args()
-    logdir = '-'.join(['log/log-ADSH-nuswide', datetime.now().strftime("%y-%m-%d-%H-%M-%S")])
+    logdir = '-'.join(['log/log-ADCH-nuswide', datetime.now().strftime("%y-%m-%d-%H-%M-%S")])
     _logging()
     _record()
     bits = [int(bit) for bit in opt.bits.split(',')]
