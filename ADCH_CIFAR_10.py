@@ -24,7 +24,9 @@ parser.add_argument('--max-iter', default=50, type=int, help='maximum iteration 
 parser.add_argument('--epochs', default=3, type=int, help='number of epochs (default: 3)')
 parser.add_argument('--batch-size', default=64, type=int, help='batch size (default: 64)')
 parser.add_argument('--num-samples', default=2000, type=int, help='hyper-parameter: number of samples (default: 2000)')
-parser.add_argument('--gamma', default=200, type=int, help='hyper-parameter: gamma (default: 200)')
+parser.add_argument('--ppLambda', default=1, type=int, help='hyper-parameter: pLambda (default: 1)')
+parser.add_argument('--pEpsilon', default=2, type=int, help='hyper-parameter: epsilon (default: 2)')
+parser.add_argument('--pLambda', default=200, type=int, help='hyper-parameter: lambda (default: 200)')
 parser.add_argument('--learning-rate', default=0.001, type=float,
                     help='hyper-parameter: learning rate (default: 10**-3)')
 
@@ -109,12 +111,12 @@ def calc_sim(database_label, train_label):
     return S
 
 
-def calc_loss(V, U, S, code_length, select_index, gamma):
+def calc_loss(V, U, S, code_length, select_index, pLambda):
     num_database = V.shape[0]
     square_loss = (U.dot(V.transpose()) - code_length * S) ** 2
     V_omega = V[select_index, :]
     quantization_loss = (U - V_omega) ** 2
-    loss = (square_loss.sum() + gamma * quantization_loss.sum()) / (opt.num_samples * num_database)
+    loss = (square_loss.sum() + pLambda * quantization_loss.sum()) / (opt.num_samples * num_database)
     return loss
 
 
@@ -148,7 +150,9 @@ def adch_algo(code_length):
     learning_rate = opt.learning_rate
     weight_decay = 5 * 10 ** -4
     num_samples = opt.num_samples
-    gamma = opt.gamma
+    pGamma = opt.pGamma
+    pEpsilon = opt.pEpsilon
+    pLambda = opt.pLambda
     record['param']['opt'] = opt
     record['param']['description'] = '[Comment: learning rate decay]'
     logger.info(opt)
@@ -166,7 +170,7 @@ def adch_algo(code_length):
     '''
     model = cnn_model.CNNNet(opt.arch, code_length)
     model.cuda()
-    adch_loss = al.ADCHLoss(gamma, code_length, num_database)
+    adch_loss = al.ADCHLoss(pLambda, code_length, num_database)
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     V = np.zeros((num_database, code_length))
     model.train()
@@ -203,7 +207,7 @@ def adch_algo(code_length):
         '''
         barU = np.zeros((num_database, code_length))
         barU[select_index, :] = U
-        Q = -2 * code_length * Sim.cpu().numpy().transpose().dot(U) - 2 * gamma * barU
+        Q = -2 * code_length * Sim.cpu().numpy().transpose().dot(U) - 2 * pLambda * barU
         for k in range(code_length):
             sel_ind = np.setdiff1d([ii for ii in range(code_length)], k)
             V_ = V[:, sel_ind]
@@ -211,7 +215,7 @@ def adch_algo(code_length):
             U_ = U[:, sel_ind]
             V[:, k] = -np.sign(Q[:, k] + 2 * V_.dot(U_.transpose().dot(Uk)))
         iter_time = time.time() - iter_time
-        loss_ = calc_loss(V, U, Sim.cpu().numpy(), code_length, select_index, gamma)
+        loss_ = calc_loss(V, U, Sim.cpu().numpy(), code_length, select_index, pLambda)
         logger.info('[Iteration: %3d/%3d][Train Loss: %.4f]', iter, max_iter, loss_)
         record['train loss'].append(loss_)
         record['iter time'].append(iter_time)

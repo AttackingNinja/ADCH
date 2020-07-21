@@ -4,9 +4,9 @@ from torch.autograd import Variable
 
 
 class ADCHLoss(nn.Module):
-    def __init__(self, gamma, code_length, num_train):
+    def __init__(self, pLambda, code_length, num_train):
         super(ADCHLoss, self).__init__()
-        self.gamma = gamma
+        self.pLambda = pLambda
         self.code_length = code_length
         self.num_train = num_train
 
@@ -16,6 +16,6 @@ class ADCHLoss(nn.Module):
         V_omega = Variable(torch.from_numpy(V_omega).type(torch.FloatTensor).cuda())
         S = Variable(S.cuda())
         square_loss = (u.mm(V.t()) - self.code_length * S) ** 2
-        quantization_loss = self.gamma * (V_omega - u) ** 2
+        quantization_loss = self.pLambda * (V_omega - u) ** 2
         loss = (square_loss.sum() + quantization_loss.sum()) / (self.num_train * batch_size)
         return loss
