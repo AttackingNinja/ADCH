@@ -1,3 +1,0 @@
-root: INFO: Namespace(arch='resnet50', batch_size=64, bits='12,24,32,48', epochs=3, gpu='0', learning_rate=0.001, max_iter=50, num_samples=2000, pEpsilon=2, pGamma=1, pLambda=200)
-root: INFO: 12
-root: INFO: [Comment: learning rate decay]

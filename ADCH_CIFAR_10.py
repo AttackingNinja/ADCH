@@ -117,12 +117,13 @@ def update_sim(output, u_ind, V, Sim, pGamma, pEpsilon):
 
     def alpha(m, n):
         if Sim[m, n] > 0:
+            m = m if m < d.shape[0] else m % d.shape[0]
             return (2 * pGamma + d[m, n] ** pEpsilon) / pGamma
         else:
             return Sim[m, n]
 
     for i in u_ind:
-        for j in Sim.size(1):
+        for j in range(Sim.size(1)):
             Sim[i, j] = alpha(i, j)
     return Sim
 
