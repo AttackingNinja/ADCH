@@ -114,17 +114,13 @@ def calc_sim(database_label, train_label):
 def update_sim(output, u_ind, V, Sim, pGamma, pEpsilon):
     u = np.sign(output)
     d = 0.5 * (u.shape[1] - np.dot(u, V.transpose()))
-
-    def alpha(m, n):
-        if Sim[m, n] > 0:
-            m = m if m < d.shape[0] else m % d.shape[0]
-            return (2 * pGamma + d[m, n] ** pEpsilon) / pGamma
-        else:
-            return Sim[m, n]
-
+    sample_num = u.shape[0]
+    print("start update")
     for i in u_ind:
         for j in range(Sim.size(1)):
-            Sim[i, j] = alpha(i, j)
+            if Sim[i, j] > 0:
+                Sim[i, j] = (2 * pGamma + d[i % sample_num, j] ** pEpsilon) / pGamma
+    print("update finish")
     return Sim
 
 
@@ -232,7 +228,7 @@ def adch_algo(code_length):
             Uk = U[:, k]
             U_ = U[:, sel_ind]
             V[:, k] = -np.sign(Q[:, k] + 2 * V_.dot(U_.transpose().dot(Uk)))
-            Sim = update_sim(U, np.arange(U.shape[0] + 1), V, Sim, pGamma, pEpsilon)
+            Sim = update_sim(U, np.arange(U.shape[0]), V, Sim, pGamma, pEpsilon)
         iter_time = time.time() - iter_time
         loss_ = calc_loss(V, U, Sim.cpu().numpy(), code_length, select_index, pLambda)
         logger.info('[Iteration: %3d/%3d][Train Loss: %.4f]', iter, max_iter, loss_)
