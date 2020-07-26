@@ -24,8 +24,8 @@ parser.add_argument('--max-iter', default=50, type=int, help='maximum iteration 
 parser.add_argument('--epochs', default=3, type=int, help='number of epochs (default: 3)')
 parser.add_argument('--batch-size', default=64, type=int, help='batch size (default: 64)')
 parser.add_argument('--num-samples', default=2000, type=int, help='hyper-parameter: number of samples (default: 2000)')
-parser.add_argument('--pGamma', default=1, type=int, help='hyper-parameter: gamma (default: 1)')
-parser.add_argument('--pEpsilon', default=2, type=int, help='hyper-parameter: epsilon (default: 2)')
+parser.add_argument('--pGamma', default=2, type=int, help='hyper-parameter: gamma (default: 2)')
+parser.add_argument('--pEpsilon', default=0.5, type=float, help='hyper-parameter: epsilon (default: 0.5)')
 parser.add_argument('--pLambda', default=200, type=int, help='hyper-parameter: lambda (default: 200)')
 parser.add_argument('--learning-rate', default=0.001, type=float,
                     help='hyper-parameter: learning rate (default: 10**-3)')
@@ -108,19 +108,18 @@ def calc_sim(database_label, train_label):
     '''
     r = S.sum() / (1 - S).sum()
     S = S * (1 + r) - r
-    return S
+    return r, S
 
 
-def update_sim(output, u_ind, V, Sim, pGamma, pEpsilon):
+def update_sim(output, u_ind, V, Sim, r, pGamma, pEpsilon):
     u = np.sign(output)
     d = 0.5 * (u.shape[1] - np.dot(u, V.transpose()))
-    sample_num = u.shape[0]
-    print("start update")
-    for i in u_ind:
-        for j in range(Sim.size(1)):
-            if Sim[i, j] > 0:
-                Sim[i, j] = (2 * pGamma + d[i % sample_num, j] ** pEpsilon) / pGamma
-    print("update finish")
+    alpha = (2 * pGamma + d ** pEpsilon) / pGamma
+    S = (Sim.index_select(0, torch.from_numpy(u_ind)) > 0).type(torch.FloatTensor)
+    S = S * (1 + r) - r
+    S = S.mul(torch.from_numpy(alpha).type(torch.FloatTensor))
+    S = torch.clamp(S, min=-r)
+    Sim[u_ind, :] = S
     return Sim
 
 
@@ -166,6 +165,7 @@ def adch_algo(code_length):
     pGamma = opt.pGamma
     pEpsilon = opt.pEpsilon
     pLambda = opt.pLambda
+    record['param']['topk'] = 5000
     record['param']['opt'] = opt
     record['param']['description'] = '[Comment: learning rate decay]'
     logger.info(opt)
@@ -185,7 +185,7 @@ def adch_algo(code_length):
     model.cuda()
     adch_loss = al.ADCHLoss(pLambda, code_length, num_database)
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    V = np.zeros((num_database, code_length))
+    V = np.ones((num_database, code_length))
     model.train()
     for iter in range(max_iter):
         iter_time = time.time()
@@ -199,7 +199,7 @@ def adch_algo(code_length):
         learning deep neural network: feature learning
         '''
         sample_label = database_labels.index_select(0, torch.from_numpy(np.array(select_index)))
-        Sim = calc_sim(sample_label, database_labels)
+        r, Sim = calc_sim(sample_label, database_labels)
         U = np.zeros((num_samples, code_length), dtype=np.float)
         for epoch in range(epochs):
             for iteration, (train_input, train_label, batch_ind) in enumerate(trainloader):
@@ -214,7 +214,7 @@ def adch_algo(code_length):
                 loss = adch_loss(output, V, S, V[batch_ind.cpu().numpy(), :])
                 loss.backward()
                 optimizer.step()
-                Sim = update_sim(U[u_ind, :], u_ind, V, Sim, pGamma, pEpsilon)
+                Sim = update_sim(U[u_ind, :], u_ind, V, Sim, r, pGamma, pEpsilon)
         adjusting_learning_rate(optimizer, iter)
         '''
         learning binary codes: discrete coding
@@ -228,7 +228,7 @@ def adch_algo(code_length):
             Uk = U[:, k]
             U_ = U[:, sel_ind]
             V[:, k] = -np.sign(Q[:, k] + 2 * V_.dot(U_.transpose().dot(Uk)))
-            Sim = update_sim(U, np.arange(U.shape[0]), V, Sim, pGamma, pEpsilon)
+            Sim = update_sim(U, np.arange(U.shape[0]), V, Sim, r, pGamma, pEpsilon)
         iter_time = time.time() - iter_time
         loss_ = calc_loss(V, U, Sim.cpu().numpy(), code_length, select_index, pLambda)
         logger.info('[Iteration: %3d/%3d][Train Loss: %.4f]', iter, max_iter, loss_)
@@ -242,10 +242,12 @@ def adch_algo(code_length):
     qB = encode(model, testloader, num_test, code_length)
     rB = V
     map = calc_hr.calc_map(qB, rB, test_labels.numpy(), database_labels.numpy())
-    logger.info('[Evaluation: mAP: %.4f]', map)
+    topkmap = calc_hr.calc_topMap(qB, rB, test_labels.numpy(), database_labels.numpy(), record['param']['topk'])
+    logger.info('[Evaluation: mAP: %.4f, top-%d mAP: %.4f]', map, record['param']['topk'], topkmap)
     record['rB'] = rB
     record['qB'] = qB
     record['map'] = map
+    record['topkmap'] = topkmap
     filename = os.path.join(logdir, str(code_length) + 'bits-record.pkl')
     _save_record(record, filename)
 
