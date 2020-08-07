@@ -24,9 +24,7 @@ parser.add_argument('--max-iter', default=50, type=int, help='maximum iteration 
 parser.add_argument('--epochs', default=3, type=int, help='number of epochs (default: 3)')
 parser.add_argument('--batch-size', default=64, type=int, help='batch size (default: 64)')
 parser.add_argument('--num-samples', default=2000, type=int, help='hyper-parameter: number of samples (default: 2000)')
-parser.add_argument('--pGamma', default=2, type=int, help='hyper-parameter: gamma (default: 2)')
-parser.add_argument('--pEpsilon', default=0.5, type=float, help='hyper-parameter: epsilon (default: 0.5)')
-parser.add_argument('--pLambda', default=200, type=int, help='hyper-parameter: lambda (default: 200)')
+parser.add_argument('--pLambda', default=500, type=int, help='hyper-parameter: lambda (default: 500)')
 parser.add_argument('--learning-rate', default=0.001, type=float,
                     help='hyper-parameter: learning rate (default: 10**-3)')
 
@@ -111,10 +109,10 @@ def calc_sim(database_label, train_label):
     return r, S
 
 
-def update_sim(output, u_ind, V, Sim, r, pGamma, pEpsilon):
-    u = np.sign(output)
-    d = 0.5 * (u.shape[1] - np.dot(u, V.transpose()))
-    alpha = (2 * pGamma + d ** pEpsilon) / pGamma
+def update_sim(u, u_ind, V, Sim, r):
+    k = u.shape[1]
+    d = 0.5 * (k - np.dot(u, V.transpose()))
+    alpha = 1 + (d ** 1.5) / k
     S = (Sim.index_select(0, torch.from_numpy(u_ind)) > 0).type(torch.FloatTensor)
     S = S * (1 + r) - r
     S = S.mul(torch.from_numpy(alpha).type(torch.FloatTensor))
@@ -123,7 +121,7 @@ def update_sim(output, u_ind, V, Sim, r, pGamma, pEpsilon):
     return Sim
 
 
-def calc_loss(V, U, S, code_length, select_index, pLambda):
+def calc_loss(V, U, S, code_length, select_index, pTheta, pLambda):
     num_database = V.shape[0]
     square_loss = (U.dot(V.transpose()) - code_length * S) ** 2
     V_omega = V[select_index, :]
@@ -162,8 +160,6 @@ def adch_algo(code_length):
     learning_rate = opt.learning_rate
     weight_decay = 5 * 10 ** -4
     num_samples = opt.num_samples
-    pGamma = opt.pGamma
-    pEpsilon = opt.pEpsilon
     pLambda = opt.pLambda
     record['param']['topk'] = 5000
     record['param']['opt'] = opt
@@ -230,13 +226,15 @@ def adch_algo(code_length):
             V[:, k] = -np.sign(Q[:, k] + 2 * V_.dot(U_.transpose().dot(Uk)))
             Sim = update_sim(U, np.arange(U.shape[0]), V, Sim, r, pGamma, pEpsilon)
         iter_time = time.time() - iter_time
-        loss_ = calc_loss(V, U, Sim.cpu().numpy(), code_length, select_index, pLambda)
-        logger.info('[Iteration: %3d/%3d][Train Loss: %.4f]', iter, max_iter, loss_)
+        loss_ = calc_loss(V, U, Sim.cpu().numpy(), code_length, select_index, pTheta, pLambda)
+        logger.info('[Iteration: %3d/%3d][Train Loss: %.4f]', iter + 1, max_iter, loss_)
         record['train loss'].append(loss_)
         record['iter time'].append(iter_time)
     '''
     training procedure finishes, evaluation
     '''
+    dict_path = os.path.join(logdir, 'adch-cifar10-' + str(code_length) + 'bits.pth')
+    torch.save(model.state_dict(), dict_path)
     model.eval()
     testloader = DataLoader(dset_test, batch_size=1, shuffle=False, num_workers=4)
     qB = encode(model, testloader, num_test, code_length)
