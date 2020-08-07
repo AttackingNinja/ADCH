@@ -210,7 +210,7 @@ def adch_algo(code_length):
                 loss = adch_loss(output, V, S, V[batch_ind.cpu().numpy(), :])
                 loss.backward()
                 optimizer.step()
-                Sim = update_sim(U[u_ind, :], u_ind, V, Sim, r, pGamma, pEpsilon)
+                Sim = update_sim(U[u_ind, :], u_ind, V, Sim, r)
         adjusting_learning_rate(optimizer, iter)
         '''
         learning binary codes: discrete coding
@@ -224,7 +224,7 @@ def adch_algo(code_length):
             Uk = U[:, k]
             U_ = U[:, sel_ind]
             V[:, k] = -np.sign(Q[:, k] + 2 * V_.dot(U_.transpose().dot(Uk)))
-            Sim = update_sim(U, np.arange(U.shape[0]), V, Sim, r, pGamma, pEpsilon)
+            Sim = update_sim(U[u_ind, :], u_ind, V, Sim, r)
         iter_time = time.time() - iter_time
         loss_ = calc_loss(V, U, Sim.cpu().numpy(), code_length, select_index, pTheta, pLambda)
         logger.info('[Iteration: %3d/%3d][Train Loss: %.4f]', iter + 1, max_iter, loss_)
