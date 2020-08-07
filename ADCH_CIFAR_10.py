@@ -121,7 +121,7 @@ def update_sim(u, u_ind, V, Sim, r):
     return Sim
 
 
-def calc_loss(V, U, S, code_length, select_index, pTheta, pLambda):
+def calc_loss(V, U, S, code_length, select_index, pLambda):
     num_database = V.shape[0]
     square_loss = (U.dot(V.transpose()) - code_length * S) ** 2
     V_omega = V[select_index, :]
@@ -226,7 +226,7 @@ def adch_algo(code_length):
             V[:, k] = -np.sign(Q[:, k] + 2 * V_.dot(U_.transpose().dot(Uk)))
             Sim = update_sim(U[u_ind, :], u_ind, V, Sim, r)
         iter_time = time.time() - iter_time
-        loss_ = calc_loss(V, U, Sim.cpu().numpy(), code_length, select_index, pTheta, pLambda)
+        loss_ = calc_loss(V, U, Sim.cpu().numpy(), code_length, select_index, pLambda)
         logger.info('[Iteration: %3d/%3d][Train Loss: %.4f]', iter + 1, max_iter, loss_)
         record['train loss'].append(loss_)
         record['iter time'].append(iter_time)
